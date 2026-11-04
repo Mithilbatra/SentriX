@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SentriX</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #fff; --ink: #18202b; --mute: #5f6b7a; --line: #e3e6eb;
+    --bad: #b42318; --bad-bg: #fdecea; --warn: #9a5b00; --warn-bg: #fff4e0;
+    --ring: #3157d5; --cash: #7a3fc8; --victim: #8a94a3; --ok: #1d7a46;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0e1116; --card: #161b22; --ink: #e6e9ee; --mute: #9aa4b2; --line: #2a313c;
+      --bad: #ff7b72; --bad-bg: #3b1c1c; --warn: #f0b04a; --warn-bg: #3a2c12;
+      --ring: #7d9bff; --cash: #c39bff; --victim: #6e7681; --ok: #56d364;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--bg); color: var(--ink); }
+  header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 32px; padding: 16px 24px; }
+  h1 { font-size: 20px; margin: 0; } h1 small { font-weight: 400; color: var(--mute); margin-left: 8px; font-size: 14px; }
+  h2 { font-size: 15px; margin: 0 0 8px; }
+  .stats { display: flex; gap: 24px; margin-left: auto; }
+  .stats div { color: var(--mute); } .stats b { display: block; color: var(--ink); font-size: 18px; font-variant-numeric: tabular-nums; }
+  #status::before { content: "●"; margin-right: 6px; color: var(--victim); }
+  #status.live::before { color: var(--ok); }
+  main { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 0 24px 24px; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; min-width: 0; }
+  .wide { grid-column: 1 / -1; }
+  .scroll { max-height: 440px; overflow: auto; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th { text-align: left; font-weight: 600; color: var(--mute); position: sticky; top: 0; background: var(--card); }
+  th, td { padding: 5px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  td.num { text-align: right; }
+  #alerts td:last-child { white-space: normal; min-width: 160px; }
+  tr.flag td { background: var(--bad-bg); }
+  .risk { display: inline-block; min-width: 44px; text-align: center; border-radius: 6px; padding: 0 6px; font-weight: 600; }
+  .risk.hi { color: var(--bad); background: var(--bad-bg); }
+  .risk.mid { color: var(--warn); background: var(--warn-bg); }
+  .risk.lo { color: var(--mute); }
+  .empty { display: none; color: var(--mute); margin: 12px 0; }
+  section:has(tbody:empty) .empty, section:has(ul:empty) .empty { display: block; }
+  .rings { display: grid; grid-template-columns: minmax(220px, 300px) 1fr; gap: 16px; }
+  #ring-list { list-style: none; margin: 0; padding: 0; max-height: 480px; overflow: auto; }
+  #ring-list button { width: 100%; text-align: left; font: inherit; color: inherit; background: none; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin-bottom: 6px; cursor: pointer; }
+  #ring-list button[aria-pressed="true"] { border-color: var(--ring); box-shadow: inset 3px 0 0 var(--ring); }
+  #ring-list button:focus-visible, #refresh:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+  #refresh { float: right; font: inherit; color: var(--ring); background: none; border: 0; cursor: pointer; }
+  svg { width: 100%; max-height: 480px; }
+  .edge { stroke: var(--mute); stroke-width: 1.5; }
+  #arrow path { fill: var(--mute); }
+  .node circle { stroke: var(--card); stroke-width: 2; }
+  .node text { fill: var(--ink); font-size: 11px; }
+  .ring circle { fill: var(--ring); } .mule circle { fill: var(--bad); } .cashout circle { fill: var(--cash); } .victim circle { fill: var(--victim); }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 16px; color: var(--mute); font-size: 13px; white-space: nowrap; }
+  .legend span::before { content: "●"; margin-right: 4px; }
+  .legend .ring::before { color: var(--ring); } .legend .mule::before { color: var(--bad); }
+  .legend .cashout::before { color: var(--cash); } .legend .victim::before { color: var(--victim); }
+  @media (max-width: 860px) { main, .rings { grid-template-columns: 1fr; } main, header { padding-left: 16px; padding-right: 16px; } .stats { margin-left: 0; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>SentriX <small>Real-time UPI fraud detection</small></h1>
+  <span id="status" role="status">Connecting…</span>
+  <div class="stats">
+    <div>Transactions<b id="seen">0</b></div>
+    <div>Flagged<b id="flagged">0</b></div>
+    <div>Flag rate<b id="rate">–</b></div>
+  </div>
+</header>
+<main>
+  <section>
+    <h2>Live transactions</h2>
+    <div class="scroll"><table>
+      <thead><tr><th scope="col">Time</th><th scope="col">Payer → payee</th><th scope="col">Amount</th><th scope="col">Risk</th></tr></thead>
+      <tbody id="feed"></tbody>
+    </table><p class="empty">Waiting for transactions. Start the generator with <code>make live</code>.</p></div>
+  </section>
+  <section>
+    <h2>Fraud alerts</h2>
+    <div class="scroll"><table>
+      <thead><tr><th scope="col">Time</th><th scope="col">Payer → payee</th><th scope="col">Amount</th><th scope="col">Risk</th><th scope="col">Signals</th></tr></thead>
+      <tbody id="alerts"></tbody>
+    </table><p class="empty">No alerts yet.</p></div>
+  </section>
+  <section class="wide">
+    <h2>Fraud rings and mule accounts <button id="refresh" type="button">Refresh</button></h2>
+    <div class="rings">
+      <div><ul id="ring-list"></ul><p class="empty">Nothing detected yet. Run <code>make rings</code>.</p></div>
+      <div>
+        <div class="legend"><span class="ring">Ring member</span><span class="mule">Mule</span><span class="cashout">Cash-out</span><span class="victim">Payer to mule</span></div>
+        <svg id="graph" viewBox="-240 -235 480 480" role="img" aria-label="No cluster selected">
+          <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z"/></marker></defs>
+        </svg>
+      </div>
+    </div>
+  </section>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const inr = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
+const short = vpa => vpa.replace('@upi', '');
+let seen = 0, flagged = 0;
+const shown = new Set();
+
+function cell(tr, text, cls) { const td = tr.insertCell(); td.textContent = text; if (cls) td.className = cls; return td; }
+
+function txnRow(t, withSignals) {
+  const tr = document.createElement('tr');
+  tr.dataset.ts = t.ts;
+  if (t.flag && !withSignals) tr.className = 'flag';
+  cell(tr, new Date(t.ts).toLocaleTimeString());
+  cell(tr, `${short(t.payer)} → ${short(t.payee)}`);
+  cell(tr, inr.format(t.amount), 'num');
+  const badge = document.createElement('span');
+  badge.className = 'risk ' + (t.risk >= 0.5 ? 'hi' : t.risk >= 0.2 ? 'mid' : 'lo');
+  badge.textContent = t.risk.toFixed(2);
+  cell(tr, '').append(badge);
+  if (withSignals) {
+    const why = [];
+    if (t.new_device) why.push('new device');
+    if (t.cnt_10m >= 3) why.push(`${t.cnt_10m} txns in 10 min`);
+    if (t.amt_ratio >= 5) why.push(`${Math.round(t.amt_ratio)}× usual amount`);
+    if (t.new_payee) why.push('new payee');
+    cell(tr, why.join(', '));
+  }
+  return tr;
+}
+
+// Kafka partitions arrive interleaved, so place each row by time (newest first).
+function add(tbody, tr, max) {
+  tbody.insertBefore(tr, [...tbody.rows].find(r => +r.dataset.ts <= +tr.dataset.ts) ?? null);
+  while (tbody.rows.length > max) tbody.deleteRow(-1);
+}
+
+function addAlert(t) {
+  if (shown.has(t.txn_id)) return;
+  shown.add(t.txn_id);
+  add($('alerts'), txnRow(t, true), 200);
+}
+
+function stats() {
+  $('seen').textContent = seen.toLocaleString();
+  $('flagged').textContent = flagged.toLocaleString();
+  $('rate').textContent = seen ? (100 * flagged / seen).toFixed(1) + '%' : '–';
+}
+
+const events = new EventSource('/events');
+events.onopen = () => { $('status').textContent = 'Live'; $('status').className = 'live'; };
+events.onerror = () => { $('status').textContent = 'Reconnecting…'; $('status').className = ''; };
+events.onmessage = e => {
+  const t = JSON.parse(e.data);
+  seen++;
+  add($('feed'), txnRow(t, false), 60);
+  if (t.flag) { flagged++; addAlert(t); }
+  stats();
+};
+
+fetch('/api/alerts?limit=100').then(r => r.json()).then(list => list.reverse().forEach(addAlert));
+
+const NS = 'http://www.w3.org/2000/svg';
+function svgEl(tag, attrs, parent) {
+  const el = document.createElementNS(NS, tag);
+  for (const k in attrs) el.setAttribute(k, attrs[k]);
+  parent.append(el);
+  return el;
+}
+
+function draw(c) {
+  const svg = $('graph');
+  svg.querySelectorAll('g').forEach(g => g.remove());
+  const root = svgEl('g', {}, svg);
+  const center = c.type === 'mule' ? c.members[0] : null;
+  let around = c.members.filter(m => m !== center);
+  if (c.type === 'ring') {  // walk the cycle so the arrows run around the circle
+    const next = Object.fromEntries(c.edges.map(e => [e.src, e.dst])), order = [around[0]];
+    while (next[order.at(-1)] && !order.includes(next[order.at(-1)])) order.push(next[order.at(-1)]);
+    around = [...order, ...around.filter(m => !order.includes(m))];
+  }
+  const radius = around.length > 8 ? 185 : 140, pos = {};
+  around.forEach((m, i) => {
+    const a = 2 * Math.PI * i / around.length - Math.PI / 2;
+    pos[m] = [radius * Math.cos(a), radius * Math.sin(a)];
+  });
+  if (center) pos[center] = [0, 0];
+  const cashouts = new Set(c.edges.filter(e => e.src === center).map(e => e.dst));
+  for (const e of c.edges) {
+    const [x1, y1] = pos[e.src], [x2, y2] = pos[e.dst];
+    const k = 17 / (Math.hypot(x2 - x1, y2 - y1) || 1);  // end the line at the node's rim
+    const line = svgEl('line', { class: 'edge', 'marker-end': 'url(#arrow)',
+      x1: x1 + (x2 - x1) * k, y1: y1 + (y2 - y1) * k, x2: x2 - (x2 - x1) * k, y2: y2 - (y2 - y1) * k }, root);
+    svgEl('title', {}, line).textContent = `${e.src} → ${e.dst}: ${inr.format(e.total)} in ${e.n} transfer(s)`;
+  }
+  for (const m of c.members) {
+    const role = m === center ? 'mule' : cashouts.has(m) ? 'cashout' : center ? 'victim' : 'ring';
+    const node = svgEl('g', { class: `node ${role}`, transform: `translate(${pos[m]})` }, root);
+    svgEl('circle', { r: 14 }, node);
+    svgEl('text', { y: 30, 'text-anchor': 'middle' }, node).textContent = short(m);
+    svgEl('title', {}, node).textContent = `${m} (${role})`;
+  }
+  svg.setAttribute('aria-label', `${c.type === 'ring' ? 'Fraud ring' : 'Mule account'} with ${c.members.length} accounts`);
+}
+
+async function loadRings() {
+  const list = await (await fetch('/api/rings')).json();
+  const ul = $('ring-list');
+  ul.replaceChildren();
+  for (const c of list) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.setAttribute('aria-pressed', 'false');
+    button.textContent = `${c.type === 'ring' ? 'Ring' : 'Mule'} · ${c.members.length} accounts · ${inr.format(c.score)}`;
+    button.onclick = () => {
+      ul.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b === button)));
+      draw(c);
+    };
+    const li = document.createElement('li');
+    li.append(button);
+    ul.append(li);
+  }
+  ul.querySelector('button')?.click();
+}
+$('refresh').onclick = loadRings;
+loadRings();
+</script>
+</body>
+</html>
