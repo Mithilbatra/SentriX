@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<configuration>
+  <property><name>hbase.cluster.distributed</name><value>true</value></property>
+  <property><name>hbase.rootdir</name><value>hdfs://master:9000/hbase</value></property>
+  <property><name>hbase.zookeeper.quorum</name><value>master</value></property>
+  <property><name>hbase.zookeeper.property.dataDir</name><value>/data/zk</value></property>
+  <!-- ZooKeeper's admin web server would take port 8080 from the Spark master UI -->
+  <property><name>hbase.zookeeper.property.admin.enableServer</name><value>false</value></property>
+  <!-- Docker's reverse DNS returns container names, not the compose hostnames the RegionServers report -->
+  <property><name>hbase.regionserver.hostname.disable.master.reversedns</name><value>true</value></property>
+  <!-- classic WAL writer; asyncfs depends on HDFS internals -->
+  <property><name>hbase.wal.provider</name><value>filesystem</value></property>
+</configuration>

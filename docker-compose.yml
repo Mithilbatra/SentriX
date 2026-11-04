@@ -1,0 +1,41 @@
+# 1 master + 2 workers, plus the dashboard. The repo is mounted at /app on every node.
+x-node: &node
+  build: infra
+  image: sentrix
+  restart: unless-stopped
+
+services:
+  master:
+    <<: *node
+    hostname: master
+    environment: [ROLE=master]
+    volumes: [".:/app", "master-data:/data"]
+    ports:  # localhost only: WebHDFS on 9870 accepts writes without auth
+      - "127.0.0.1:9870:9870"   # HDFS NameNode UI
+      - "127.0.0.1:8080:8080"   # Spark master UI
+      - "127.0.0.1:4040:4040"   # Spark job UI (first running job)
+      - "127.0.0.1:16010:16010" # HBase master UI
+
+  worker1:
+    <<: *node
+    hostname: worker1
+    environment: [ROLE=worker]
+    volumes: [".:/app", "worker1-data:/data"]
+
+  worker2:
+    <<: *node
+    hostname: worker2
+    environment: [ROLE=worker]
+    volumes: [".:/app", "worker2-data:/data"]
+
+  dashboard:
+    <<: *node
+    environment: [ROLE=dashboard]
+    volumes: [".:/app"]
+    ports: ["127.0.0.1:8000:8000"]
+    depends_on: [master]
+
+volumes:
+  master-data:
+  worker1-data:
+  worker2-data:
