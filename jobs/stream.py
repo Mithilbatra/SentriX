@@ -87,6 +87,7 @@ conn.close()
  .load()
  .select(F.from_json(F.col("value").cast("string"), TXN).alias("t")).select("t.*")
  .dropna().filter("amount > 0")  # drop malformed messages
+ .filter("ts <= unix_millis(current_timestamp()) + 300000")  # a future ts would never leave the 10-minute window
  .writeStream.foreachBatch(process)
  .option("checkpointLocation", f"{HDFS}/checkpoint/stream")
  .trigger(processingTime="2 seconds")
