@@ -27,7 +27,8 @@ rings:    ## fraud-ring and mule detection
 	$(SUBMIT) jobs/rings.py
 
 test:
-	docker run --rm -v "$(CURDIR):/app" sentrix python3 -m pytest -q
+	docker run --rm -v "$(CURDIR):/app" -e PYTHONPATH=/app:/opt/spark/python:/opt/spark/python/lib/py4j-0.10.9.7-src.zip \
+	  sentrix python3 -m pytest -q
 
 down:
 	docker compose down

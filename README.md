@@ -137,7 +137,7 @@ infra/       Dockerfile, entrypoint.sh, Hadoop/HBase/Spark/Kafka config
 sentrix/     generator, feature definitions, HBase helpers
 jobs/        Spark jobs: train.py, stream.py, rings.py
 dashboard/   FastAPI app and the single-page UI
-tests/       unit tests (features, generator, dashboard API)
+tests/       unit tests (features, generator, dashboard API, ring and mule rules on local Spark)
 ```
 
 ## Known limits
