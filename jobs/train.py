@@ -24,10 +24,15 @@ def replay(txns):
 
 
 def save_profiles(profiles):
+    """Seed accounts that have no profile yet; the live scorer keeps existing ones current."""
+    profiles = list(profiles)
     conn = store.connect()
-    with conn.table("accounts").batch(batch_size=500) as b:
+    table = conn.table("accounts")
+    have = {k for k, _ in table.rows([p for p, _ in profiles], columns=[b"p:state"])}
+    with table.batch(batch_size=500) as b:
         for payer, state in profiles:
-            b.put(payer, {"p:state": json.dumps(state)})
+            if payer.encode() not in have:
+                b.put(payer, {"p:state": json.dumps(state)})
     conn.close()
 
 
@@ -59,4 +64,4 @@ conn = store.connect()
 store.ensure_tables(conn)
 conn.close()
 by_payer.map(lambda kv: (kv[0], kv[1][1])).foreachPartition(save_profiles)
-print(f"model saved to {HDFS}/model, {by_payer.count()} account profiles written to HBase")
+print(f"model saved to {HDFS}/model; profiles seeded for accounts that had none")

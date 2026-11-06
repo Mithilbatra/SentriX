@@ -51,7 +51,7 @@ make train     # train the model, seed account profiles in HBase
 Then, in two terminals:
 
 ```bash
-make stream    # real-time scorer
+make stream    # real-time scorer; restart it after `make train` to load the new model
 ```
 
 ```bash
@@ -106,7 +106,8 @@ model sees the same features in both.
 
 **Model** (`jobs/train.py`). Random forest (50 trees) in a Spark ML pipeline, trained on the
 first 80% of the history and tested on the last 20%. It is saved to HDFS, and each account's
-final profile is written to HBase so live scoring starts with real history.
+final profile seeds HBase so live scoring starts with real history. Retraining leaves existing
+profiles alone, because the live scorer keeps them current.
 
 **Scoring** (`jobs/stream.py`). Structured Streaming reads `txns` from Kafka every 2 seconds.
 The batch is partitioned by payer; executors load the payers' profiles from HBase, compute
