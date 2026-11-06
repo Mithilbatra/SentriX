@@ -39,7 +39,10 @@ def found(spark, rows):
 
 
 def test_finds_the_ring_and_the_mule_but_not_the_shop(spark):
-    assert found(spark, payments()) == {("ring", "r1"), ("mule", "mule")}
+    clusters = find_clusters(spark.createDataFrame(payments(), SCHEMA))
+    assert {(c["type"], c["members"][0]) for c in clusters} == {("ring", "r1"), ("mule", "mule")}
+    mule = next(c for c in clusters if c["type"] == "mule")
+    assert mule["members"][:2] == ["mule", "cash"] and len(mule["members"]) == 22  # + the top 20 payers
 
 
 def test_a_pause_in_activity_does_not_hide_the_ring(spark):
