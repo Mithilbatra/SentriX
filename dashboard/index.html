@@ -148,10 +148,16 @@ function stats() {
   $('rate').textContent = seen ? (100 * flagged / seen).toFixed(1) + '%' : '–';
 }
 
+function status(text, live) { $('status').textContent = text; $('status').className = live ? 'live' : ''; }
+let lastData = 0;
 const events = new EventSource('/events');
-events.onopen = () => { $('status').textContent = 'Live'; $('status').className = 'live'; };
-events.onerror = () => { $('status').textContent = 'Reconnecting…'; $('status').className = ''; };
+events.onopen = () => status('Waiting for data');
+events.onerror = () => status('Reconnecting…');
+// The stream stays open when the scorer stops, so "Live" also needs recent data.
+setInterval(() => { if ($('status').className === 'live' && Date.now() - lastData > 15000) status('No new data'); }, 5000);
 events.onmessage = e => {
+  lastData = Date.now();
+  status('Live', true);
   const t = JSON.parse(e.data);
   seen++;
   add($('feed'), txnRow(t, false), 60);
