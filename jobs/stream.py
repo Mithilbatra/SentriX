@@ -50,7 +50,7 @@ def save_alerts(rows):
     conn = store.connect()
     with conn.table("alerts").batch() as b:
         for r in rows:
-            b.put(f"{10**13 - r.ts:013d}#{r.txn_id}", {"a:json": json.dumps(r.asDict())})  # newest first
+            b.put(store.alert_key(r.ts, r.txn_id), {"a:json": json.dumps(r.asDict())})
     conn.close()
 
 

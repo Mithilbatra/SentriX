@@ -37,9 +37,11 @@ def client(monkeypatch, tables):
 
 
 def test_alerts_newest_first_and_limit_validated(monkeypatch):
-    alerts = {f"{10**13 - ts:013d}#t{ts}": {b"a:json": json.dumps({"ts": ts}).encode()} for ts in (1, 3, 2)}
+    # keys from the scorer's own alert_key; real millisecond timestamps
+    times = (1_793_800_000_000, 1_793_800_000_002, 1_793_800_000_001)
+    alerts = {store.alert_key(ts, f"t{ts}"): {b"a:json": json.dumps({"ts": ts}).encode()} for ts in times}
     c = client(monkeypatch, {"alerts": alerts})
-    assert [a["ts"] for a in c.get("/api/alerts?limit=2").json()] == [3, 2]
+    assert [a["ts"] for a in c.get("/api/alerts?limit=2").json()] == [1_793_800_000_002, 1_793_800_000_001]
     assert c.get("/api/alerts?limit=0").status_code == 422
 
 
