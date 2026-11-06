@@ -1,4 +1,4 @@
-# 1 master + 2 workers, plus the dashboard. The repo is mounted at /app on every node.
+# 1 master + 2 workers, plus the dashboard. The repo is mounted read-only at /app on every node.
 x-node: &node
   build: infra
   image: sentrix
@@ -9,7 +9,7 @@ services:
     <<: *node
     hostname: master
     environment: [ROLE=master]
-    volumes: [".:/app", "master-data:/data"]
+    volumes: [".:/app:ro", "master-data:/data"]
     ports:  # localhost only: WebHDFS on 9870 accepts writes without auth
       - "127.0.0.1:9870:9870"   # HDFS NameNode UI
       - "127.0.0.1:8080:8080"   # Spark master UI
@@ -20,18 +20,18 @@ services:
     <<: *node
     hostname: worker1
     environment: [ROLE=worker]
-    volumes: [".:/app", "worker1-data:/data"]
+    volumes: [".:/app:ro", "worker1-data:/data"]
 
   worker2:
     <<: *node
     hostname: worker2
     environment: [ROLE=worker]
-    volumes: [".:/app", "worker2-data:/data"]
+    volumes: [".:/app:ro", "worker2-data:/data"]
 
   dashboard:
     <<: *node
     environment: [ROLE=dashboard]
-    volumes: [".:/app"]
+    volumes: [".:/app:ro"]
     ports: ["127.0.0.1:8000:8000"]
     depends_on: [master]
 
