@@ -1,10 +1,7 @@
 import pytest
+from pyspark.sql import SparkSession  # needs Spark + GraphFrames, as in `make test` and CI
 
-pytest.importorskip("pyspark")  # runs where Spark + GraphFrames are installed: `make test` and CI
-pytest.importorskip("graphframes")
-from pyspark.sql import SparkSession  # noqa: E402
-
-from jobs.rings import find_clusters, save  # noqa: E402
+from jobs.rings import find_clusters, save
 
 SCHEMA = "payer string, payee string, amount double, ts long"
 DAY_MS = 24 * 3600 * 1000
