@@ -38,7 +38,9 @@ def find_clusters(txns):
 
     # Rings
     heavy = edges.filter((F.col("n") >= 2) & (F.col("total") >= RING_EDGE_TOTAL))
-    scc = GraphFrame(vertices, heavy).stronglyConnectedComponents(maxIter=10).select("id", "component")
+    # Each round finds one more layer of rings that feed into each other; at 10 rounds a
+    # test chain of 12 rings lost 3 without any warning, at 50 it found all of them.
+    scc = GraphFrame(vertices, heavy).stronglyConnectedComponents(maxIter=50).select("id", "component")
     members = (scc.groupBy("component").agg(F.sort_array(F.collect_list("id")).alias("members"))
                .filter(F.size("members") >= 3))
     inside = (heavy.join(scc.withColumnRenamed("id", "src"), "src")
