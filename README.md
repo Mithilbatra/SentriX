@@ -39,7 +39,9 @@ each node's role. The repo is mounted at `/app` on every node, so code changes n
 
 ## Run it
 
-Needs Docker with about 8 GB of RAM free. The first build downloads about 1.6 GB.
+Needs Docker with about 10 GB of RAM: the cluster peaked at 8.4 GB with the scorer, the live
+generator and the ring job running together (6.2 GB with just the scorer). The first build
+downloads about 1.6 GB.
 
 ```bash
 make up        # build and start the cluster + dashboard
