@@ -16,7 +16,7 @@ from pyspark.sql.utils import AnalysisException
 
 from sentrix import HDFS, store
 
-WINDOW_MS = 24 * 3600 * 1000  # analyse the latest 24 hours
+MAX_TXNS = 250_000        # newest transactions analysed, about a day at 2 txns/s
 RING_EDGE_TOTAL = 50_000  # Rs moved along one payer -> payee edge
 MULE_PAYERS = 20          # distinct one-off payers
 MULE_PASS = (0.5, 1.5)    # outflow / inflow
@@ -38,8 +38,9 @@ try:
     txns = txns.unionByName(spark.read.parquet(f"{HDFS}/archive").select(cols))
 except AnalysisException:  # the live scorer has not archived anything yet
     pass
-# The thresholds are counts and totals, so keep the window fixed as the archive grows.
-txns = txns.filter(F.col("ts") > txns.agg(F.max("ts")).first()[0] - WINDOW_MS)
+# The thresholds are counts and totals, so cap the input as the archive grows.
+# By count, not time: after a pause in activity a time window holds almost nothing.
+txns = txns.orderBy(F.desc("ts")).limit(MAX_TXNS)
 
 edges = (txns.groupBy(F.col("payer").alias("src"), F.col("payee").alias("dst"))
          .agg(F.count("*").alias("n"), F.round(F.sum("amount"), 2).alias("total"))

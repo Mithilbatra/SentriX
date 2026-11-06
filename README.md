@@ -59,7 +59,7 @@ make live      # live transactions -> Kafka
 ```
 
 Open the dashboard at http://localhost:8000. Run the ring detection at any time, also
-while the scorer runs (it analyses the latest 24 hours of history plus archived live data):
+while the scorer runs (it analyses the newest 250,000 transactions of history plus archived live data):
 
 ```bash
 make rings
@@ -114,8 +114,9 @@ features, and write the updated profiles back. Transactions with fraud probabili
 are flagged. Every scored transaction goes to Kafka `scored` (dashboard feed) and to HDFS
 (input for the ring job); flagged ones go to the HBase `alerts` table.
 
-**Rings and mules** (`jobs/rings.py`). Over the latest 24 hours of transactions, accounts are
-vertices and each payer -> payee pair is one edge with its transfer count and total. Rings are strongly connected components with 3+
+**Rings and mules** (`jobs/rings.py`). Over the newest 250,000 transactions (about a day of
+activity), accounts are vertices and each payer -> payee pair is one edge with its transfer
+count and total. Rings are strongly connected components with 3+
 accounts in the subgraph of repeated (2+) edges that moved at least Rs 50,000: money that
 keeps coming back to where it started. Mules are accounts paid once each by 20+ different
 payers that pass on 50-150% of what they receive. Results replace the HBase `rings` table,
