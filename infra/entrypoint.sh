@@ -40,16 +40,17 @@ case "${ROLE:-}" in
     ;;
 esac
 logs=(/opt/hadoop/logs/*.log /opt/hbase/logs/*.log /opt/spark/logs/*.out)
-pids=$(cat /tmp/*.pid)  # read now: HBase deletes its pid file when the process exits
 if [ "$ROLE" = master ]; then
   logs+=(/opt/kafka/logs/server.log)
-  pids+=" $(pgrep -f kafka.Kafka)"  # started with -daemon, which writes no pid file
+  daemons="namenode.NameNode deploy.master.Master kafka.Kafka HQuorumPeer HMaster ThriftServer"
+else
+  daemons="datanode.DataNode deploy.worker.Worker HRegionServer"
 fi
 tail -F "${logs[@]}" &
-# This script is the container's main process, so exit when any daemon dies:
-# the restart policy then restarts the whole node.
+# This script is the container's main process, so exit when a daemon is not running, also one
+# that died during startup: the restart policy then restarts the whole node.
 while sleep 10; do
-  for pid in $pids; do
-    kill -0 "$pid" 2>/dev/null || { echo "daemon $pid died, restarting this node"; exit 1; }
+  for d in $daemons; do
+    pgrep -f "$d" >/dev/null || { echo "$d is not running, restarting this node"; exit 1; }
   done
 done
