@@ -4,7 +4,7 @@ Graph: accounts are vertices; a payer -> payee edge aggregates all their transfe
 Rings: strongly connected components (3+ accounts) of the repeated high-value subgraph,
        i.e. money that keeps coming back to where it started.
 Mules: accounts paid once each by many different payers that pass most of it on.
-Results replace the HBase `rings` table; precision/recall against the history labels is printed.
+Results replace those in the HBase `rings` table; precision/recall against the history labels is printed.
 
     spark-submit jobs/rings.py
 """
@@ -77,12 +77,19 @@ for m in mules.collect():
                      "edges": [e.asDict() for e in cashouts + victims], "score": round(m.in_amt, 2)})
 
 conn = store.connect()
-if b"rings" in conn.tables():
-    conn.delete_table("rings", disable=True)
 store.ensure_tables(conn)
-with conn.table("rings").batch() as b:
-    for c in clusters:
-        b.put(c["id"], {"r:json": json.dumps(c)})
+table = conn.table("rings")
+ids = {c["id"] for c in clusters}
+if ids:  # write the new result first, then drop the clusters that are gone
+    with table.batch() as b:
+        for c in clusters:
+            b.put(c["id"], {"r:json": json.dumps(c)})
+    with table.batch() as b:
+        for key, _ in table.scan():
+            if key.decode() not in ids:
+                b.delete(key)
+else:
+    print("no clusters found; keeping the previous result")
 conn.close()
 
 labelled = history.filter("fraud_type IN ('ring', 'mule')").select("payer", "payee", "fraud_type").collect()
