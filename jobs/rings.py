@@ -57,9 +57,15 @@ def find_clusters(txns):
     mules = (vertices.join(one_off_payers, "id")
              .filter((F.col("inDegree") >= MULE_PAYERS)
                      & F.col("out_amt").between(MULE_PASS[0] * F.col("in_amt"), MULE_PASS[1] * F.col("in_amt"))))
-    for m in mules.collect():
-        victims = edges.filter((F.col("dst") == m.id) & (F.col("n") == 1)).orderBy(F.desc("total")).limit(20).collect()
-        cashouts = edges.filter((F.col("src") == m.id) & (F.col("total") >= 0.1 * m.out_amt)).collect()
+    mules = {m.id: m for m in mules.collect()}
+    near = {k: [] for k in mules}  # each mule's edges, fetched in one Spark job rather than two per mule
+    if mules:
+        for e in edges.filter(F.col("src").isin(list(mules)) | F.col("dst").isin(list(mules))).collect():
+            for k in {e.src, e.dst} & near.keys():
+                near[k].append(e)
+    for m in mules.values():
+        victims = sorted((e for e in near[m.id] if e.dst == m.id and e.n == 1), key=lambda e: -e.total)[:20]
+        cashouts = [e for e in near[m.id] if e.src == m.id and e.total >= 0.1 * m.out_amt]
         clusters.append({"id": f"mule-{m.id}", "type": "mule",
                          "members": [m.id] + [e.dst for e in cashouts] + [e.src for e in victims],
                          "edges": [e.asDict() for e in cashouts + victims], "score": round(m.in_amt, 2)})
