@@ -2,7 +2,8 @@
 
 Each micro-batch: executors compute features from each payer's profile in HBase,
 the RandomForest scores them, then every scored txn goes to Kafka `scored` (dashboard feed)
-and the HDFS archive (fraud-ring job), and flagged ones to the HBase `alerts` table.
+and flagged ones to the HBase `alerts` table. A second query copies `scored` into the HDFS
+archive (input for the fraud-ring job) once a minute.
 
     spark-submit jobs/stream.py
 """
@@ -20,6 +21,7 @@ THRESHOLD = 0.5
 TXN = "txn_id string, ts long, payer string, payee string, amount double, device string"
 EXTRA = [k for k in FEATURES if k != "amount"]  # amount is already a txn field
 FEATURED = TXN + "".join(f", {k} double" for k in EXTRA)
+SCORED = FEATURED + ", risk double, flag boolean"
 # P(fraud) from the probability vector; pyspark.ml.functions.vector_to_array would need pandas
 p_fraud = F.udf(lambda v: round(float(v[1]), 4), DoubleType())
 
@@ -66,8 +68,6 @@ def process(batch, _batch_id):
     scored.filter("flag").foreachPartition(save_alerts)
     (scored.select(F.to_json(F.struct("*")).alias("value")).write.format("kafka")
      .option("kafka.bootstrap.servers", KAFKA).option("topic", "scored").save())
-    # shortcut: one small file per micro-batch; compact the archive if the demo runs for days.
-    scored.coalesce(1).write.mode("append").parquet(f"{HDFS}/archive")
     scored.unpersist()
 
 
@@ -89,5 +89,21 @@ conn.close()
  .writeStream.foreachBatch(process)
  .option("checkpointLocation", f"{HDFS}/checkpoint/stream")
  .trigger(processingTime="2 seconds")
- .start()
- .awaitTermination())
+ .start())
+
+# Archive for the ring job: one Parquet file a minute instead of one per 2-second micro-batch.
+# The file sink commits each file through its own checkpoint, so readers never see partial or
+# repeated files.
+(spark.readStream.format("kafka")
+ .option("kafka.bootstrap.servers", KAFKA)
+ .option("subscribe", "scored")
+ .option("startingOffsets", "earliest")
+ .load()
+ .select(F.from_json(F.col("value").cast("string"), SCORED).alias("t")).select("t.*")
+ .coalesce(1)
+ .writeStream.format("parquet")
+ .option("path", f"{HDFS}/archive")
+ .option("checkpointLocation", f"{HDFS}/checkpoint/archive")
+ .trigger(processingTime="1 minute")
+ .start())
+spark.streams.awaitAnyTermination()
