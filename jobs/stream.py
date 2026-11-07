@@ -7,6 +7,7 @@ and the HDFS archive (fraud-ring job), and flagged ones to the HBase `alerts` ta
     spark-submit jobs/stream.py
 """
 import json
+from contextlib import closing
 
 from pyspark.ml import PipelineModel
 from pyspark.sql import SparkSession, functions as F
@@ -28,18 +29,17 @@ def featurize(rows):
     rows = sorted(rows, key=lambda r: r.ts)
     if not rows:
         return []
-    conn = store.connect()
-    accounts = conn.table("accounts")
     payers = list({r.payer for r in rows})
-    states = {k.decode(): json.loads(v[b"p:state"]) for k, v in accounts.rows(payers, columns=[b"p:state"])}
-    out, last = [], {}
-    for r in rows:
-        last[r.payer] = f = step(states.setdefault(r.payer, new_state()), r.asDict())
-        out.append((*r, *(f[k] for k in EXTRA)))
-    with accounts.batch() as b:
-        for p in payers:
-            b.put(p, {"p:state": json.dumps(states[p]), "f:last": json.dumps(last[p])})
-    conn.close()
+    with closing(store.connect()) as conn:
+        accounts = conn.table("accounts")
+        states = {k.decode(): json.loads(v[b"p:state"]) for k, v in accounts.rows(payers, columns=[b"p:state"])}
+        out, last = [], {}
+        for r in rows:
+            last[r.payer] = f = step(states.setdefault(r.payer, new_state()), r.asDict())
+            out.append((*r, *(f[k] for k in EXTRA)))
+        with accounts.batch() as b:
+            for p in payers:
+                b.put(p, {"p:state": json.dumps(states[p]), "f:last": json.dumps(last[p])})
     return out
 
 
@@ -47,11 +47,9 @@ def save_alerts(rows):
     rows = list(rows)
     if not rows:
         return
-    conn = store.connect()
-    with conn.table("alerts").batch() as b:
+    with closing(store.connect()) as conn, conn.table("alerts").batch() as b:
         for r in rows:
             b.put(store.alert_key(r.ts, r.txn_id), {"a:json": json.dumps(r.asDict())})
-    conn.close()
 
 
 def process(batch, _batch_id):
