@@ -23,10 +23,11 @@ MULE_PASS = (0.5, 1.5)    # outflow / inflow
 
 
 def find_clusters(txns):
-    """Rings and mules in a DataFrame of payer, payee, amount, ts -> list of cluster dicts."""
+    """Rings and mules in a DataFrame of txn_id, payer, payee, amount, ts -> list of cluster dicts."""
+    # Kafka `scored` is at-least-once, so a replayed micro-batch can repeat transactions.
     # The thresholds are counts and totals, so cap the input as the archive grows.
     # By count, not time: after a pause in activity a time window holds almost nothing.
-    txns = txns.orderBy(F.desc("ts")).limit(MAX_TXNS)
+    txns = txns.dropDuplicates(["txn_id"]).orderBy(F.desc("ts")).limit(MAX_TXNS)
 
     edges = (txns.groupBy(F.col("payer").alias("src"), F.col("payee").alias("dst"))
              .agg(F.count("*").alias("n"), F.round(F.sum("amount"), 2).alias("total"))
@@ -97,7 +98,7 @@ if __name__ == "__main__":
     spark = SparkSession.builder.appName("sentrix-rings").getOrCreate()
     spark.sparkContext.setCheckpointDir(f"{HDFS}/checkpoint/graph")
 
-    cols = ["payer", "payee", "amount", "ts"]
+    cols = ["txn_id", "payer", "payee", "amount", "ts"]
     history = spark.read.json(f"{HDFS}/history.jsonl")
     txns = history.select(cols)
     try:

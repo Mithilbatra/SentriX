@@ -3,7 +3,7 @@ from pyspark.sql import SparkSession  # needs Spark + GraphFrames, as in `make t
 
 from jobs.rings import find_clusters, save
 
-SCHEMA = "payer string, payee string, amount double, ts long"
+SCHEMA = "txn_id string, payer string, payee string, amount double, ts long"
 DAY_MS = 24 * 3600 * 1000
 
 
@@ -19,7 +19,7 @@ def payments():
     out = []
 
     def pay(payer, payee, amount):
-        out.append((payer, payee, float(amount), 1000 * len(out)))
+        out.append((f"t{len(out)}", payer, payee, float(amount), 1000 * len(out)))
 
     for _ in range(2):  # the ring passes money round twice
         pay("r1", "r2", 30_000), pay("r2", "r3", 29_000), pay("r3", "r1", 28_000)
@@ -43,8 +43,14 @@ def test_finds_the_ring_and_the_mule_but_not_the_shop(spark):
 
 
 def test_a_pause_in_activity_does_not_hide_the_ring(spark):
-    later = [("x1", "x2", 100.0, 2 * DAY_MS + i) for i in range(3)]  # a trickle two days later
+    later = [(f"late{i}", "x1", "x2", 100.0, 2 * DAY_MS + i) for i in range(3)]  # a trickle two days later
     assert ("ring", "r1") in found(spark, payments() + later)
+
+
+def test_a_replayed_transaction_counts_once(spark):
+    """Kafka `scored` is at-least-once: a replay must not turn single transfers into repeated ones."""
+    cycle = [("t1", "a", "b", 60_000.0, 1), ("t2", "b", "c", 60_000.0, 2), ("t3", "c", "a", 60_000.0, 3)]
+    assert found(spark, cycle * 2) == set()
 
 
 class FakeTable(dict):
