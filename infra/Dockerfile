@@ -13,7 +13,7 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 RUN pip3 install --no-cache-dir numpy==1.26.4 happybase==1.3.0 kafka-python==2.3.3 \
-      fastapi==0.162.0 uvicorn==0.54.0 pytest==9.2.0 httpx==0.28.1 \
+      fastapi==0.162.0 uvicorn==0.54.0 pytest==9.2.0 httpx2==2.13.1 \
  && pip3 install --no-cache-dir --no-deps graphframes-py==0.9.3
 
 RUN curl -fsSLo /tmp/hadoop.tgz $APACHE/hadoop/common/hadoop-3.3.6/hadoop-3.3.6.tar.gz \
