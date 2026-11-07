@@ -3,7 +3,7 @@
     spark-submit jobs/train.py
 """
 import json
-
+from contextlib import closing
 from pyspark.ml import Pipeline
 from pyspark.ml.classification import RandomForestClassifier
 from pyspark.ml.evaluation import BinaryClassificationEvaluator
@@ -26,14 +26,13 @@ def replay(txns):
 def save_profiles(profiles):
     """Seed accounts that have no profile yet; the live scorer keeps existing ones current."""
     profiles = list(profiles)
-    conn = store.connect()
-    table = conn.table("accounts")
-    have = {k for k, _ in table.rows([p for p, _ in profiles], columns=[b"p:state"])}
-    with table.batch(batch_size=500) as b:
-        for payer, state in profiles:
-            if payer.encode() not in have:
-                b.put(payer, {"p:state": json.dumps(state)})
-    conn.close()
+    with closing(store.connect()) as conn:
+        table = conn.table("accounts")
+        have = {k for k, _ in table.rows([p for p, _ in profiles], columns=[b"p:state"])}
+        with table.batch(batch_size=500) as b:
+            for payer, state in profiles:
+                if payer.encode() not in have:
+                    b.put(payer, {"p:state": json.dumps(state)})
 
 
 spark = SparkSession.builder.appName("sentrix-train").getOrCreate()
