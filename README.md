@@ -114,8 +114,9 @@ profiles alone, because the live scorer keeps them current.
 **Scoring** (`jobs/stream.py`). Structured Streaming reads `txns` from Kafka every 2 seconds.
 The batch is partitioned by payer; executors load the payers' profiles from HBase, compute
 features, and write the updated profiles back. Transactions with fraud probability >= 0.5
-are flagged. Every scored transaction goes to Kafka `scored` (dashboard feed) and to HDFS
-(input for the ring job); flagged ones go to the HBase `alerts` table.
+are flagged. Every scored transaction goes to Kafka `scored` (dashboard feed); flagged ones go
+to the HBase `alerts` table. A second query in the same job copies `scored` into an HDFS
+archive once a minute (input for the ring job), one Parquet file per minute, written exactly once.
 
 **Rings and mules** (`jobs/rings.py`). Over the newest 250,000 transactions (about a day of
 activity), accounts are vertices and each payer -> payee pair is one edge with its transfer
@@ -146,6 +147,4 @@ tests/       unit tests (features, generator, dashboard API, ring and mule rules
 ## Known limits
 
 - A micro-batch replayed after a driver crash updates profiles twice (at-least-once).
-- The scorer appends one small Parquet file per micro-batch to the archive; compact it if
-  the demo runs for days.
 - Ring and mule thresholds are tuned for the synthetic data, not real UPI traffic.
