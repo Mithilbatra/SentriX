@@ -1,6 +1,6 @@
 import json
 
-from sentrix.features import WINDOW_MS, new_state, step
+from sentrix.features import MAX_KNOWN, WINDOW_MS, new_state, step
 
 
 def txn(ts, amount=100.0, payee="m001@upi", device="d0001"):
@@ -32,3 +32,13 @@ def test_state_survives_json_round_trip():
     for i, t in enumerate([txn(0), txn(5_000, 250.0, "u0009@upi"), txn(9_000, 40.0)]):
         b = json.loads(json.dumps(b))
         assert step(a, t) == step(b, t), i
+
+
+def test_known_payees_are_capped_and_the_least_recently_used_go_first():
+    s = new_state()
+    for i in range(MAX_KNOWN):
+        step(s, txn(i, payee=f"p{i}"))
+    step(s, txn(MAX_KNOWN, payee="p0"))  # p0 used again, so it is now the most recent
+    assert step(s, txn(MAX_KNOWN + 1, payee="new"))["new_payee"] == 1.0  # over the cap: drops p1
+    assert len(s["payees"]) == MAX_KNOWN
+    assert "p0" in s["payees"] and "p1" not in s["payees"]

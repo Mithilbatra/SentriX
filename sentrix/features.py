@@ -5,6 +5,7 @@ One implementation serves both training (replayed over history) and the live sco
 """
 
 WINDOW_MS = 10 * 60 * 1000
+MAX_KNOWN = 200  # payees and devices remembered per account; one unused for longer counts as new again
 FEATURES = ["amount", "cnt_10m", "sum_10m", "amt_ratio", "new_payee", "new_device"]
 
 
@@ -28,8 +29,9 @@ def step(state, txn):
     }
     state["recent"] = recent + [[ts, amount]]
     for key, value in (("payees", txn["payee"]), ("devices", txn["device"])):
-        if value not in state[key]:
-            state[key].append(value)
+        if value in state[key]:
+            state[key].remove(value)  # most recently used last, so the cap drops the stalest
+        state[key] = (state[key] + [value])[-MAX_KNOWN:]
     state["amt_sum"] += amount
     state["amt_cnt"] += 1
     return features
