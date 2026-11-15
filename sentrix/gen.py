@@ -10,6 +10,7 @@ import argparse
 import heapq
 import itertools
 import json
+import math
 import random
 import sys
 import time
@@ -127,6 +128,10 @@ def main():
     ap.add_argument("--hours", type=float, default=24, help="history length (default 24)")
     ap.add_argument("--tps", type=float, default=2, help="transactions per second (default 2)")
     args = ap.parse_args()
+    for name in ("hours", "tps"):
+        value = getattr(args, name)
+        if not math.isfinite(value) or value <= 0:
+            ap.error(f"--{name} must be a positive finite number")
     now = time.time() * 1000
 
     if args.mode == "history":
