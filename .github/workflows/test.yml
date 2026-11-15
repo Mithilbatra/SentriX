@@ -26,3 +26,7 @@ jobs:
           curl -fsSLo "$jar" https://repo1.maven.org/maven2/io/graphframes/graphframes-spark3_2.12/0.9.3/graphframes-spark3_2.12-0.9.3.jar
           echo "3ec893c194b0abf716e8c350cafd7ba152026ac613d1365a8da0c8f9bfdce4b8  $jar" | sha256sum -c -
       - run: python -m pytest -q
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: node --test tests/dashboard.test.cjs

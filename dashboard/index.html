@@ -22,7 +22,8 @@
   header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 32px; padding: 16px 24px; }
   h1 { font-size: 20px; margin: 0; } h1 small { font-weight: 400; color: var(--mute); margin-left: 8px; font-size: 14px; }
   h2 { font-size: 15px; margin: 0 0 8px; }
-  .stats { display: flex; gap: 24px; margin-left: auto; }
+  .stats { display: flex; flex-wrap: wrap; gap: 4px 24px; margin-left: auto; }
+  .stats small { flex-basis: 100%; color: var(--mute); }
   .stats div { color: var(--mute); } .stats b { display: block; color: var(--ink); font-size: 18px; font-variant-numeric: tabular-nums; }
   #status::before { content: "●"; margin-right: 6px; color: var(--victim); }
   #status.live::before { color: var(--ok); }
@@ -42,12 +43,16 @@
   .risk.lo { color: var(--mute); }
   .empty { display: none; color: var(--mute); margin: 12px 0; }
   section:has(tbody:empty) .empty, section:has(ul:empty) .empty { display: block; }
+  section:has(.refresh:disabled) .empty, section:has(.load-status.error) .empty { display: none; }
+  .load-status { color: var(--mute); font-size: 12px; margin: 0 0 10px; }
+  .load-status.error { color: var(--bad); }
   .rings { display: grid; grid-template-columns: minmax(220px, 300px) 1fr; gap: 16px; }
   #ring-list { list-style: none; margin: 0; padding: 0; max-height: 480px; overflow: auto; }
   #ring-list button { width: 100%; text-align: left; font: inherit; color: inherit; background: none; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin-bottom: 6px; cursor: pointer; }
   #ring-list button[aria-pressed="true"] { border-color: var(--ring); box-shadow: inset 3px 0 0 var(--ring); }
-  #ring-list button:focus-visible, #refresh:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
-  #refresh { float: right; font: inherit; color: var(--ring); background: none; border: 0; cursor: pointer; }
+  #ring-list button:focus-visible, .refresh:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+  .refresh { float: right; font: inherit; color: var(--ring); background: none; border: 0; cursor: pointer; }
+  .refresh:disabled { color: var(--mute); cursor: wait; }
   svg { width: 100%; max-height: 480px; }
   .edge { stroke: var(--mute); stroke-width: 1.5; }
   #arrow path { fill: var(--mute); }
@@ -69,6 +74,7 @@
     <div>Transactions<b id="seen">0</b></div>
     <div>Flagged<b id="flagged">0</b></div>
     <div>Flag rate<b id="rate">–</b></div>
+    <small>Since this page opened</small>
   </div>
 </header>
 <main>
@@ -80,14 +86,16 @@
     </table><p class="empty">Waiting for transactions. Start the generator with <code>make live</code>.</p></div>
   </section>
   <section>
-    <h2>Fraud alerts</h2>
+    <h2>Fraud alerts <button id="alerts-refresh" class="refresh" type="button">Refresh</button></h2>
+    <p id="alerts-status" class="load-status" role="status"></p>
     <div class="scroll"><table>
-      <thead><tr><th scope="col">Time</th><th scope="col">Payer → payee</th><th scope="col">Amount</th><th scope="col">Risk</th><th scope="col">Signals</th></tr></thead>
+      <thead><tr><th scope="col">Date and time</th><th scope="col">Payer → payee</th><th scope="col">Amount</th><th scope="col">Risk</th><th scope="col">Signals</th></tr></thead>
       <tbody id="alerts"></tbody>
     </table><p class="empty">No alerts yet.</p></div>
   </section>
   <section class="wide">
-    <h2>Fraud rings and mule accounts <button id="refresh" type="button">Refresh</button></h2>
+    <h2>Fraud rings and mule accounts <button id="refresh" class="refresh" type="button">Refresh</button></h2>
+    <p id="rings-status" class="load-status" role="status"></p>
     <div class="rings">
       <div><ul id="ring-list"></ul><p class="empty">Nothing detected yet. Run <code>make rings</code>.</p></div>
       <div>
@@ -101,10 +109,11 @@
 </main>
 <script>
 const $ = id => document.getElementById(id);
-const inr = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
+const inr = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' });
 const short = vpa => vpa.replace('@upi', '');
 let seen = 0, flagged = 0;
 const shown = new Set();
+const received = new Set(); // Remember the most recent 5,000 live IDs; keep memory bounded.
 
 function cell(tr, text, cls) { const td = tr.insertCell(); td.textContent = text; if (cls) td.className = cls; return td; }
 
@@ -112,7 +121,8 @@ function txnRow(t, withSignals) {
   const tr = document.createElement('tr');
   tr.dataset.ts = t.ts;
   if (t.flag && !withSignals) tr.className = 'flag';
-  cell(tr, new Date(t.ts).toLocaleTimeString());
+  const time = new Date(t.ts);
+  cell(tr, withSignals ? time.toLocaleString() : time.toLocaleTimeString());
   cell(tr, `${short(t.payer)} → ${short(t.payee)}`);
   cell(tr, inr.format(t.amount), 'num');
   const badge = document.createElement('span');
@@ -149,14 +159,38 @@ function stats() {
 }
 
 function status(text, live) { $('status').textContent = text; $('status').className = live ? 'live' : ''; }
+async function refreshData(url, buttonId, messageId, render) {
+  const button = $(buttonId), message = $(messageId);
+  if (button.disabled) return;
+  button.disabled = true;
+  button.textContent = 'Loading…';
+  message.classList.remove('error');
+  message.textContent = 'Loading…';
+  try {
+    const response = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    if (!response.ok) throw new Error('Request failed');
+    const list = await response.json();
+    if (!Array.isArray(list)) throw new Error('Invalid response');
+    render(list);
+    message.textContent = 'Last refreshed ' + new Date().toLocaleTimeString();
+  } catch {
+    message.classList.add('error');
+    message.textContent = 'Could not refresh data. Use Refresh to retry; displayed results may be out of date.';
+  } finally {
+    button.disabled = false;
+    button.textContent = 'Refresh';
+  }
+}
+const loadAlerts = () => refreshData('/api/alerts?limit=200', 'alerts-refresh', 'alerts-status',
+  list => list.reverse().forEach(addAlert));
+$('alerts-refresh').onclick = loadAlerts;
+loadAlerts(); // Stored alerts remain available even if the live stream cannot connect.
+
 let lastData = 0;
 const events = new EventSource('/events');
 events.onopen = () => {
   status('Waiting for data');
-  fetch('/api/alerts?limit=200').then(r => {
-    if (!r.ok) throw new Error('Could not load alerts');
-    return r.json();
-  }).then(list => list.reverse().forEach(addAlert)).catch(console.error);
+  loadAlerts();
 };
 events.onerror = () => status('Reconnecting…');
 // The stream stays open when the scorer stops, so "Live" also needs recent data.
@@ -165,6 +199,9 @@ events.onmessage = e => {
   lastData = Date.now();
   status('Live', true);
   const t = JSON.parse(e.data);
+  if (received.has(t.txn_id)) return;
+  received.add(t.txn_id);
+  if (received.size > 5000) received.delete(received.values().next().value);
   seen++;
   add($('feed'), txnRow(t, false), 60);
   if (t.flag) { flagged++; addAlert(t); }
@@ -214,27 +251,32 @@ function draw(c) {
   svg.setAttribute('aria-label', `${c.type === 'ring' ? 'Fraud ring' : 'Mule account'} with ${c.members.length} accounts`);
 }
 
-async function loadRings() {
-  const list = await (await fetch('/api/rings')).json();
+let selectedCluster = null;
+function renderRings(list) {
   const ul = $('ring-list');
   ul.replaceChildren();
   $('graph').querySelectorAll('g').forEach(g => g.remove());
   $('graph').setAttribute('aria-label', 'No cluster selected');
+  let selectedButton;
   for (const c of list) {
     const button = document.createElement('button');
     button.type = 'button';
     button.setAttribute('aria-pressed', 'false');
     button.textContent = `${c.type === 'ring' ? 'Ring' : 'Mule'} · ${c.members.length} accounts · ${inr.format(c.score)}`;
     button.onclick = () => {
+      selectedCluster = c.id;
       ul.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b === button)));
       draw(c);
     };
     const li = document.createElement('li');
     li.append(button);
     ul.append(li);
+    if (c.id === selectedCluster) selectedButton = button;
   }
-  ul.querySelector('button')?.click();
+  (selectedButton || ul.querySelector('button'))?.click();
+  if (!list.length) selectedCluster = null;
 }
+const loadRings = () => refreshData('/api/rings', 'refresh', 'rings-status', renderRings);
 $('refresh').onclick = loadRings;
 loadRings();
 </script>

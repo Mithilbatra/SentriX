@@ -71,6 +71,12 @@ Web UIs: HDFS http://localhost:9870, Spark http://localhost:8080 (running job: :
 HBase http://localhost:16010. All ports are bound to localhost only.
 `make test` runs the unit tests; `make clean` deletes all data.
 
+Dashboard regression tests run with Node.js 22 or newer:
+`node --test tests/dashboard.test.cjs` (no npm packages needed).
+Dashboard counters cover events received since the page opened; the latest 5,000 transaction
+IDs are remembered to ignore recent replays. Stored alerts load independently of the live
+connection and refresh on reconnect. Refresh reloads saved ring results, not the analysis job.
+
 ## Results
 
 Measured on this setup (one laptop-class host, synthetic data, so expect real traffic to be harder):
