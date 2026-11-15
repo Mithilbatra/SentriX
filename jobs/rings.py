@@ -74,11 +74,8 @@ def find_clusters(txns):
 
 
 def save(table, clusters):
-    """Write the new result first, then drop the clusters that are gone; an empty result keeps the old one."""
+    """Write the new result first, then drop clusters absent from this analysis."""
     ids = {c["id"] for c in clusters}
-    if not ids:
-        print("no clusters found; keeping the previous result")
-        return
     with table.batch() as b:
         for c in clusters:
             b.put(c["id"], {"r:json": json.dumps(c)})

@@ -75,9 +75,9 @@ class FakeTable(dict):
         return list(self.items())
 
 
-def test_save_replaces_the_result_but_keeps_it_when_nothing_is_found():
+def test_save_replaces_the_result_and_clears_it_when_nothing_is_found():
     table = FakeTable({b"ring-old": {}, b"ring-a": {}})
     save(table, [{"id": "ring-a"}, {"id": "mule-b"}])
     assert set(table) == {b"ring-a", b"mule-b"}
     save(table, [])
-    assert set(table) == {b"ring-a", b"mule-b"}
+    assert not table
