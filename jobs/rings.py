@@ -22,6 +22,17 @@ MULE_PAYERS = 20          # distinct one-off payers
 MULE_PASS = (0.5, 1.5)    # outflow / inflow
 
 
+def with_archive(spark, txns, path=f"{HDFS}/archive"):
+    """Allow a missing archive before streaming starts; surface other read errors."""
+    try:
+        archive = spark.read.parquet(path)
+    except AnalysisException as exc:
+        if exc.getErrorClass() != "PATH_NOT_FOUND":
+            raise
+        return txns
+    return txns.unionByName(archive.select(txns.columns))
+
+
 def find_clusters(txns):
     """Rings and mules in a DataFrame of txn_id, payer, payee, amount, ts -> list of cluster dicts."""
     # Kafka `scored` is at-least-once, so a replayed micro-batch can repeat transactions.
@@ -97,11 +108,7 @@ if __name__ == "__main__":
 
     cols = ["txn_id", "payer", "payee", "amount", "ts"]
     history = spark.read.json(f"{HDFS}/history.jsonl")
-    txns = history.select(cols)
-    try:
-        txns = txns.unionByName(spark.read.parquet(f"{HDFS}/archive").select(cols))
-    except AnalysisException:  # the live scorer has not archived anything yet
-        pass
+    txns = with_archive(spark, history.select(cols))
     clusters = find_clusters(txns)
 
     conn = store.connect()

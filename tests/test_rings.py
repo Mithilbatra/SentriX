@@ -1,7 +1,8 @@
 import pytest
 from pyspark.sql import SparkSession  # needs Spark + GraphFrames, as in `make test` and CI
+from pyspark.sql.utils import AnalysisException
 
-from jobs.rings import find_clusters, save
+from jobs.rings import find_clusters, save, with_archive
 
 SCHEMA = "txn_id string, payer string, payee string, amount double, ts long"
 DAY_MS = 24 * 3600 * 1000
@@ -12,6 +13,35 @@ def spark():
     session = SparkSession.builder.master("local[1]").getOrCreate()
     yield session
     session.stop()
+
+
+def test_missing_archive_keeps_history(spark, tmp_path):
+    history = spark.createDataFrame(payments(), SCHEMA)
+    assert with_archive(spark, history, (tmp_path / "missing").as_uri()) is history
+
+
+def test_archive_transactions_are_included(spark, tmp_path):
+    history = spark.createDataFrame(payments(), SCHEMA)
+    archive = spark.createDataFrame([("live", "a", "b", 100.0, 1)], SCHEMA)
+    path = (tmp_path / "archive").as_uri()
+    archive.write.parquet(path)
+    combined = with_archive(spark, history, path)
+    assert combined.count() == len(payments()) + 1
+    assert combined.filter("txn_id = 'live'").count() == 1
+
+
+def test_invalid_archive_schema_is_not_silently_ignored(spark, tmp_path):
+    history = spark.createDataFrame(payments(), SCHEMA)
+    path = (tmp_path / "archive").as_uri()
+    history.select("txn_id").write.parquet(path)
+    with pytest.raises(AnalysisException):
+        with_archive(spark, history, path)
+
+
+def test_unreadable_archive_is_not_treated_as_missing(spark, tmp_path):
+    history = spark.createDataFrame(payments(), SCHEMA)
+    with pytest.raises(AnalysisException):
+        with_archive(spark, history, tmp_path.as_uri())
 
 
 def payments():
