@@ -8,7 +8,7 @@ per-account behavioural features and scores every transaction with a **Spark MLl
 trained on history stored in **HDFS**. Account profiles, features and flagged transactions
 live in **HBase**. A **GraphFrames** batch job finds rings and mules, and a web dashboard
 shows the live feed, alerts and detected rings. Everything runs on a 1 master + 2 worker
-cluster (Docker Compose).
+cluster (Docker Compose), on one PC or on three.
 
 ```mermaid
 flowchart LR
@@ -66,6 +66,31 @@ while the scorer runs (it analyses the newest 250,000 transactions of history pl
 ```bash
 make rings
 ```
+
+### On three PCs (1 master + 2 workers)
+
+The same cluster, with each node on its own PC. `docker-compose.lan.yml` only swaps the network
+for a Docker Swarm *overlay network*: a virtual network that spans the PCs, so `master`, `worker1`
+and `worker2` find each other by name exactly as they do on one PC. Nothing else changes, and the
+cluster's ports are not opened on the LAN; only the overlay traffic between the three PCs is.
+
+Each PC needs Docker Engine on Linux and a copy of this repo. Docker Desktop on Mac or Windows
+runs Docker inside a hidden VM that the other PCs cannot reach, so it cannot be a node. Open these
+ports between the three PCs: 2377/tcp, 7946/tcp+udp and 4789/udp.
+
+1. On the master PC (`MASTER_IP` is its LAN address):
+   ```bash
+   docker swarm init --advertise-addr MASTER_IP
+   docker network create -d overlay --attachable sentrix-net
+   ```
+   `swarm init` prints a `docker swarm join --token ...` command.
+2. On each worker PC, run that join command.
+3. Start the nodes: `make lan-worker N=1` on the first worker PC, `make lan-worker N=2` on the
+   second, and `make lan-master` on the master PC. The order does not matter; workers wait for the master.
+4. On the master PC, everything else is as above: `make status`, `make history`, `make train`,
+   `make stream`, `make live`, `make rings`, and the dashboard at http://localhost:8000.
+
+`make down` stops the containers on that PC. `docker swarm leave --force` on every PC undoes steps 1 and 2.
 
 Web UIs: HDFS http://localhost:9870, Spark http://localhost:8080 (running job: :4040),
 HBase http://localhost:16010. All ports are bound to localhost only.

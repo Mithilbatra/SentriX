@@ -1,0 +1,7 @@
+# Three-PC mode: `docker compose -f docker-compose.yml -f docker-compose.lan.yml ...` (see README).
+# Only the network changes. Every node joins the swarm overlay network `sentrix-net`, which spans
+# the PCs, so master, worker1 and worker2 find each other by name exactly as on one PC.
+networks:
+  default:
+    name: sentrix-net
+    external: true

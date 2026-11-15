@@ -1,10 +1,19 @@
 EXEC   = docker compose exec master
 SUBMIT = $(EXEC) spark-submit
 
-.PHONY: up status history train stream live rings test down clean
+.PHONY: up lan-master lan-worker status history train stream live rings test down clean
 
 up:       ## build and start the cluster and dashboard
 	docker compose up -d --build
+
+# Three PCs (see README): run lan-master on the master PC, lan-worker N=1 / N=2 on the workers.
+LAN = docker compose -f docker-compose.yml -f docker-compose.lan.yml
+
+lan-master: ## [master PC] start the master and the dashboard on the swarm network
+	$(LAN) up -d --build master dashboard
+
+lan-worker: ## [worker PC] start worker N (N=1 or N=2)
+	$(LAN) up -d --build worker$(N)
 
 status:   ## live HDFS DataNodes, Spark workers and HBase RegionServers
 	$(EXEC) sh -c "hdfs dfsadmin -report | grep 'Live datanodes'; \
