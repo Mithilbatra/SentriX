@@ -641,7 +641,7 @@ The model was evaluated on the last 20% of the simulated day: 35,765 payments, o
 | **Actually fraud** | 888 | 54 |
 | **Actually genuine** | 14 | 34,809 |
 
-Only 14 genuine payments out of almost 35,000 were flagged, which matters because every false alert is a real customer whose payment gets blocked. We did not inspect the 54 missed frauds one by one, but the patterns suggest where they come from. A ring payment goes to an account the payer has paid before, and a victim's payment to a mule is an ordinary amount, so neither looks unusual to a per-payment model. Those are exactly the cases the graph job is for.
+Only 14 genuine payments out of almost 35,000 were flagged, which matters because every false alert is a real customer whose payment gets blocked. We did not inspect the 54 missed frauds one by one, but a breakdown by pattern shows where they come from: the model caught 95.5% of takeover payments, 97.7% of spikes and 96.4% of ring payments, but only 69.8% of payments to mules. Each victim pays a mule only once, so the velocity features give no signal, and mule payments are less extreme than spikes (median amount ratio 10.7 against 21.5). Those are the cases the graph job is for.
 
 An AUC-ROC of 1.000 should be read with care. On data with 2.6% fraud, the ROC curve looks excellent as long as the model ranks most genuine payments low, even if it raises many false alarms near the top; the PR curve does not hide this [7], which is why we treat AUC-PR as the main number.
 
@@ -685,7 +685,7 @@ Seven clusters were written to HBase: the four rings, which together moved betwe
 
 *Figure 10: A detected ring and a detected mule, as drawn by the dashboard*
 
-Neither of these would stand out to the per-payment model. The ring payments are large but go to accounts the payer has paid before, and each victim's payment to the mule is an ordinary amount. This is exactly the gap the graph job was built to fill.
+The per-payment model catches most ring payments, because they are unusually large for the accounts involved, but it misses about 30% of the payments into mules: each victim pays only once, so nothing in the burst features stands out. The graph job sees the structure instead and finds every mule account. This is exactly the gap it was built to fill.
 
 <div style="page-break-after: always;"></div>
 
